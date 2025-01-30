@@ -55,6 +55,40 @@ stages {
             }
 
         }
+        
+        stage('Create Docker Registry Secret') {
+            environment {
+                DOCKER_PASS = credentials("DOCKER_HUB_PASS")
+                KUBECONFIG = credentials("config")
+            }
+            steps {
+                script {
+                    sh '''
+                    rm -Rf .kube
+                    mkdir .kube
+                    cat $KUBECONFIG > .kube/config
+                    kubectl create secret docker-registry regcred \
+                        --docker-server=https://index.docker.io/v1/ \
+                        --docker-username=$DOCKER_ID \
+                        --docker-password=$DOCKER_PASS \
+                        --docker-email=votre@email.com \
+                        -n dev --dry-run=client -o yaml | kubectl apply -f -
+                    kubectl create secret docker-registry regcred \
+                        --docker-server=https://index.docker.io/v1/ \
+                        --docker-username=$DOCKER_ID \
+                        --docker-password=$DOCKER_PASS \
+                        --docker-email=votre@email.com \
+                        -n staging --dry-run=client -o yaml | kubectl apply -f -
+                    kubectl create secret docker-registry regcred \
+                        --docker-server=https://index.docker.io/v1/ \
+                        --docker-username=$DOCKER_ID \
+                        --docker-password=$DOCKER_PASS \
+                        --docker-email=votre@email.com \
+                        -n prod --dry-run=client -o yaml | kubectl apply -f -
+                    '''
+                }
+            }
+        }
 
 stage('Deploiement en dev'){
         environment
@@ -71,6 +105,8 @@ stage('Deploiement en dev'){
                 cp fastapi/values.yaml values.yml
                 cat values.yml
                 sed -i "s+tag.*+tag: ${DOCKER_TAG}+g" values.yml
+                sed -i "s+repository.*+repository: ${DOCKER_ID}/${DOCKER_IMAGE}+g" values.yml
+                sed -i "s/imagePullSecrets:.*/imagePullSecrets:\\n  - name: regcred/g" values.yml
                 helm upgrade --install app fastapi --values=values.yml --namespace dev
                 '''
                 }
@@ -92,6 +128,8 @@ stage('Deploiement en staging'){
                 cp fastapi/values.yaml values.yml
                 cat values.yml
                 sed -i "s+tag.*+tag: ${DOCKER_TAG}+g" values.yml
+                sed -i "s+repository.*+repository: ${DOCKER_ID}/${DOCKER_IMAGE}+g" values.yml
+                sed -i "s/imagePullSecrets:.*/imagePullSecrets:\\n  - name: regcred/g" values.yml
                 helm upgrade --install app fastapi --values=values.yml --namespace staging
                 '''
                 }
@@ -119,6 +157,8 @@ stage('Deploiement en staging'){
                 cp fastapi/values.yaml values.yml
                 cat values.yml
                 sed -i "s+tag.*+tag: ${DOCKER_TAG}+g" values.yml
+                sed -i "s+repository.*+repository: ${DOCKER_ID}/${DOCKER_IMAGE}+g" values.yml
+                sed -i "s/imagePullSecrets:.*/imagePullSecrets:\\n  - name: regcred/g" values.yml
                 helm upgrade --install app fastapi --values=values.yml --namespace prod
                 '''
                 }
